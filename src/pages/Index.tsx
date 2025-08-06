@@ -28,6 +28,20 @@ interface Download {
   status: 'downloading' | 'completed' | 'paused';
 }
 
+interface SearchResult {
+  id: string;
+  title: string;
+  url: string;
+  description: string;
+  favicon?: string;
+}
+
+interface SearchSuggestion {
+  id: string;
+  text: string;
+  type: 'search' | 'url' | 'history';
+}
+
 const Index = () => {
   const [tabs, setTabs] = useState<Tab[]>([
     {
@@ -41,6 +55,10 @@ const Index = () => {
   const [addressBarValue, setAddressBarValue] = useState('nikbrowser://welcome');
   const [isIncognitoMode, setIsIncognitoMode] = useState(false);
   const [activePanel, setActivePanel] = useState<'none' | 'bookmarks' | 'downloads' | 'settings'>('none');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
   
   const [bookmarks] = useState<Bookmark[]>([
     { id: '1', title: 'Google', url: 'https://google.com' },
@@ -54,6 +72,72 @@ const Index = () => {
     { id: '2', filename: 'document.pdf', size: '2.1 MB', progress: 75, status: 'downloading' },
     { id: '3', filename: 'image.png', size: '854 KB', progress: 100, status: 'completed' }
   ]);
+
+  // Mock search suggestions and results
+  const getSuggestions = (query: string): SearchSuggestion[] => {
+    if (!query) return [];
+    return [
+      { id: '1', text: `${query} что это`, type: 'search' },
+      { id: '2', text: `${query} википедия`, type: 'search' },
+      { id: '3', text: `${query} купить`, type: 'search' },
+      { id: '4', text: `${query} отзывы`, type: 'search' },
+      { id: '5', text: 'https://google.com', type: 'url' },
+    ];
+  };
+
+  const performSearch = (query: string) => {
+    setIsSearching(true);
+    setSearchQuery(query);
+    
+    // Mock search results
+    setTimeout(() => {
+      const results: SearchResult[] = [
+        {
+          id: '1',
+          title: `${query} - Википедия`,
+          url: `https://ru.wikipedia.org/wiki/${query}`,
+          description: `Подробная информация о ${query}. История, описание, интересные факты и многое другое.`
+        },
+        {
+          id: '2', 
+          title: `${query} - Яндекс.Маркет`,
+          url: `https://market.yandex.ru/search?text=${query}`,
+          description: `Купить ${query} с доставкой. Низкие цены, большой выбор, отзывы покупателей.`
+        },
+        {
+          id: '3',
+          title: `${query} - YouTube`,
+          url: `https://youtube.com/results?search_query=${query}`,
+          description: `Видео про ${query}. Обзоры, инструкции, развлекательный контент.`
+        },
+        {
+          id: '4',
+          title: `${query} - официальный сайт`,
+          url: `https://${query.toLowerCase().replace(/\s+/g, '')}.ru`,
+          description: `Официальная информация о ${query}. Актуальные новости и обновления.`
+        },
+        {
+          id: '5',
+          title: `${query} - отзывы и рейтинг`,
+          url: `https://otzovik.com/search/?q=${query}`,
+          description: `Честные отзывы пользователей о ${query}. Рейтинги, плюсы и минусы.`
+        },
+        {
+          id: '6',
+          title: `${query} - новости`,
+          url: `https://yandex.ru/news/search?text=${query}`,
+          description: `Последние новости о ${query}. Актуальная информация из надежных источников.`
+        }
+      ];
+      
+      setSearchResults(results);
+      setIsSearching(false);
+      
+      // Update current tab with search results
+      const searchUrl = `nikbrowser://search?q=${encodeURIComponent(query)}`;
+      navigateToUrl(searchUrl);
+    }, 800);
+  };
 
   const addNewTab = () => {
     const newTab: Tab = {
@@ -103,10 +187,36 @@ const Index = () => {
   const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     let url = addressBarValue;
-    if (!url.includes('://')) {
-      url = `https://${url}`;
+    
+    // Check if it's a search query or URL
+    if (!url.includes('.') && !url.includes('://')) {
+      // It's a search query
+      performSearch(url);
+    } else {
+      // It's a URL
+      if (!url.includes('://')) {
+        url = `https://${url}`;
+      }
+      navigateToUrl(url);
     }
-    navigateToUrl(url);
+    
+    setShowSuggestions(false);
+  };
+
+  const handleAddressChange = (value: string) => {
+    setAddressBarValue(value);
+    setShowSuggestions(value.length > 0 && !value.includes('nikbrowser://'));
+  };
+
+  const selectSuggestion = (suggestion: SearchSuggestion) => {
+    if (suggestion.type === 'url') {
+      navigateToUrl(suggestion.text);
+      setAddressBarValue(suggestion.text);
+    } else {
+      performSearch(suggestion.text);
+      setAddressBarValue(suggestion.text);
+    }
+    setShowSuggestions(false);
   };
 
   return (
@@ -190,7 +300,9 @@ const Index = () => {
               <Icon name="Lock" size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-green-600" />
               <Input
                 value={addressBarValue}
-                onChange={(e) => setAddressBarValue(e.target.value)}
+                onChange={(e) => handleAddressChange(e.target.value)}
+                onFocus={() => setShowSuggestions(addressBarValue.length > 0 && !addressBarValue.includes('nikbrowser://'))}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                 className="pl-10 pr-10 py-2 bg-slate-50 border-slate-200 rounded-full focus:bg-white focus:ring-2 focus:ring-blue-500"
                 placeholder="Введите URL или поисковый запрос..."
               />
@@ -202,6 +314,29 @@ const Index = () => {
               >
                 <Icon name="Search" size={16} />
               </Button>
+              
+              {/* Search Suggestions */}
+              {showSuggestions && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                  {getSuggestions(addressBarValue).map((suggestion) => (
+                    <div
+                      key={suggestion.id}
+                      className="flex items-center px-4 py-3 hover:bg-slate-50 cursor-pointer border-b border-slate-100 last:border-b-0"
+                      onClick={() => selectSuggestion(suggestion)}
+                    >
+                      <Icon 
+                        name={suggestion.type === 'url' ? 'Globe' : 'Search'} 
+                        size={16} 
+                        className="mr-3 text-slate-400" 
+                      />
+                      <span className="text-sm text-slate-700">{suggestion.text}</span>
+                      {suggestion.type === 'search' && (
+                        <Icon name="TrendingUp" size={14} className="ml-auto text-slate-400" />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </form>
 
@@ -314,6 +449,96 @@ const Index = () => {
                       </Button>
                     </div>
                   </div>
+                </div>
+              </div>
+            ) : addressBarValue.startsWith('nikbrowser://search') ? (
+              <div className="h-full overflow-y-auto bg-white">
+                {/* Search Results Page */}
+                <div className="max-w-4xl mx-auto px-4 py-6">
+                  {/* Search Header */}
+                  <div className="mb-6">
+                    <div className="flex items-center mb-4">
+                      <Icon name="Search" size={24} className="text-blue-600 mr-3" />
+                      <h1 className="text-2xl font-semibold text-slate-800">
+                        Результаты поиска для "{searchQuery}"
+                      </h1>
+                    </div>
+                    <p className="text-slate-600">
+                      Найдено {searchResults.length} результатов за 0.{Math.floor(Math.random() * 9) + 1} секунд
+                    </p>
+                  </div>
+
+                  {/* Search Results */}
+                  {isSearching ? (
+                    <div className="space-y-4">
+                      {[1,2,3,4,5].map((i) => (
+                        <div key={i} className="animate-pulse">
+                          <div className="h-4 bg-slate-200 rounded w-3/4 mb-2"></div>
+                          <div className="h-3 bg-slate-200 rounded w-full mb-1"></div>
+                          <div className="h-3 bg-slate-200 rounded w-2/3"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {searchResults.map((result) => (
+                        <div
+                          key={result.id}
+                          className="group cursor-pointer hover:bg-slate-50 p-4 rounded-lg transition-all"
+                          onClick={() => navigateToUrl(result.url)}
+                        >
+                          <div className="flex items-start space-x-3">
+                            <div className="flex-shrink-0 mt-1">
+                              <Icon name="Globe" size={16} className="text-slate-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-lg font-medium text-blue-600 group-hover:text-blue-700 mb-1 truncate">
+                                {result.title}
+                              </h3>
+                              <p className="text-sm text-green-700 mb-2 font-mono">
+                                {result.url}
+                              </p>
+                              <p className="text-sm text-slate-600 leading-relaxed">
+                                {result.description}
+                              </p>
+                            </div>
+                            <Icon 
+                              name="ExternalLink" 
+                              size={16} 
+                              className="text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" 
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Related Searches */}
+                  {!isSearching && (
+                    <div className="mt-8 pt-6 border-t border-slate-200">
+                      <h2 className="text-lg font-medium text-slate-800 mb-4">Похожие запросы</h2>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          `${searchQuery} википедия`,
+                          `${searchQuery} купить`,
+                          `${searchQuery} цена`,
+                          `${searchQuery} отзывы`,
+                          `${searchQuery} видео`
+                        ].map((query, index) => (
+                          <Button
+                            key={index}
+                            variant="outline"
+                            size="sm"
+                            onClick={() => performSearch(query)}
+                            className="text-blue-600 hover:text-blue-700"
+                          >
+                            <Icon name="Search" size={14} className="mr-1" />
+                            {query}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (
